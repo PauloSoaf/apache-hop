@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pipeline>
+  <info>
+    <name>99_marcar_falha</name>
+    <name_sync_with_filename>Y</name_sync_with_filename>
+    <description>Marca a execução como FAILED e aborta para preservar o estado de falha.</description>
+    <extended_description/>
+    <pipeline_version/>
+    <pipeline_type>Normal</pipeline_type>
+    <pipeline_status>0</pipeline_status>
+    <parameters/>
+    <capture_transform_performance>N</capture_transform_performance>
+    <transform_performance_capturing_delay>1000</transform_performance_capturing_delay>
+    <transform_performance_capturing_size_limit>100</transform_performance_capturing_size_limit>
+    <created_user>Codex</created_user>
+    <created_date>2026/08/25 00:00:00.000</created_date>
+    <modified_user>Codex</modified_user>
+    <modified_date>2026/08/25 00:00:00.000</modified_date>
+    <key_for_session_key/>
+    <is_key_private>N</is_key_private>
+  </info>
+  <order>
+    <hop><from>Preparar falha</from><to>Marcar log FAILED</to><enabled>Y</enabled></hop>
+    <hop><from>Marcar log FAILED</from><to>Abortar workflow</to><enabled>Y</enabled></hop>
+  </order>
+  <transform>
+    <name>Preparar falha</name>
+    <type>TableInput</type>
+    <description>Cria a atualização genérica de falha mesmo sem linhas de entrada.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning><method>none</method><schema_name/></partitioning>
+    <connection>OnlineRetailPostgreSQL</connection>
+    <sql>SELECT '${BATCH_ID}'::varchar(64) AS batch_id,
+       CURRENT_TIMESTAMP AS fim_execucao,
+       'FAILED'::varchar(16) AS status,
+       'Falha em uma etapa crítica do workflow Online Retail. Consulte o log do Apache Hop para detalhes.'::text AS mensagem_erro;</sql>
+    <limit>0</limit>
+    <lookup/>
+    <execute_each_row>N</execute_each_row>
+    <variables_active>Y</variables_active>
+    <attributes/>
+    <GUI><xloc>96</xloc><yloc>144</yloc></GUI>
+  </transform>
+  <transform>
+    <name>Marcar log FAILED</name>
+    <type>InsertUpdate</type>
+    <description>Atualiza ou cria o log do lote antes de propagar a falha.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning><method>none</method><schema_name/></partitioning>
+    <connection>OnlineRetailPostgreSQL</connection>
+    <commit>1</commit>
+    <update_bypassed>N</update_bypassed>
+    <lookup>
+      <schema>online_retail</schema>
+      <table>log_execucao</table>
+      <key><name>batch_id</name><field>batch_id</field><condition>=</condition><name2/></key>
+      <value><name>batch_id</name><rename>batch_id</rename><update>N</update></value>
+      <value><name>fim_execucao</name><rename>fim_execucao</rename><update>Y</update></value>
+      <value><name>status</name><rename>status</rename><update>Y</update></value>
+      <value><name>mensagem_erro</name><rename>mensagem_erro</rename><update>Y</update></value>
+    </lookup>
+    <attributes/>
+    <GUI><xloc>336</xloc><yloc>144</yloc></GUI>
+  </transform>
+  <transform>
+    <name>Abortar workflow</name>
+    <type>Abort</type>
+    <description>Produz erro intencional para que o workflow não termine como sucesso.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning><method>none</method><schema_name/></partitioning>
+    <abort_option>ABORT_WITH_ERROR</abort_option>
+    <always_log_rows>Y</always_log_rows>
+    <message>Execução Online Retail marcada como FAILED.</message>
+    <row_threshold>0</row_threshold>
+    <attributes/>
+    <GUI><xloc>576</xloc><yloc>144</yloc></GUI>
+  </transform>
+  <transform_error_handling/>
+  <attributes/>
+</pipeline>

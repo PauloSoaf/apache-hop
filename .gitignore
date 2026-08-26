@@ -1,0 +1,17 @@
+# Credenciais locais (nunca versionar)
+.env
+projects/online-retail/online-retail-dev.json
+
+# Dataset (23 MB, baixado do UCI - ver README)
+projects/online-retail/data/*.xlsx
+
+# Estado local do Apache Hop (histórico da GUI e log de execuções)
+audit/
+# Projeto de exemplos que a imagem do Hop recria sozinha, se existir.
+# O projeto "default" NÃO é ignorado: ele traz a run configuration "local",
+# da qual online-retail depende (parentProjectName).
+config/projects/samples/
+
+# Diversos
+*.log
+*.tmp

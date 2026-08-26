@@ -1,0 +1,16 @@
+{
+  "metadataBaseFolder": "${PROJECT_HOME}/metadata",
+  "unitTestsBasePath": "${PROJECT_HOME}",
+  "dataSetsCsvFolder": "${PROJECT_HOME}/data",
+  "enforcingExecutionInHome": true,
+  "parentProjectName": "default",
+  "config": {
+    "variables": [
+      {
+        "name": "ONLINE_RETAIL_SCHEMA",
+        "value": "online_retail",
+        "description": "Schema PostgreSQL do projeto Online Retail"
+      }
+    ]
+  }
+}

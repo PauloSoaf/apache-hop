@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pipeline>
+  <info>
+    <name>07_indicadores</name>
+    <name_sync_with_filename>Y</name_sync_with_filename>
+    <description>Calcula o resumo do lote exclusivamente a partir da fato persistida.</description>
+    <extended_description/>
+    <pipeline_version/>
+    <pipeline_type>Normal</pipeline_type>
+    <pipeline_status>0</pipeline_status>
+    <parameters/>
+    <capture_transform_performance>N</capture_transform_performance>
+    <transform_performance_capturing_delay>1000</transform_performance_capturing_delay>
+    <transform_performance_capturing_size_limit>100</transform_performance_capturing_size_limit>
+    <created_user>Codex</created_user>
+    <created_date>2026/08/25 00:00:00.000</created_date>
+    <modified_user>Codex</modified_user>
+    <modified_date>2026/08/25 00:00:00.000</modified_date>
+    <key_for_session_key/>
+    <is_key_private>N</is_key_private>
+  </info>
+  <order>
+    <hop>
+      <from>Agregar fato persistida</from>
+      <to>Upsert indicadores_resumo</to>
+      <enabled>Y</enabled>
+    </hop>
+  </order>
+  <transform>
+    <name>Agregar fato persistida</name>
+    <type>TableInput</type>
+    <description>Calcula bruto, cancelado, líquido, volumes, invoices e qualidade da fato do lote.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <connection>OnlineRetailPostgreSQL</connection>
+    <sql>WITH metricas AS (
+  SELECT COALESCE(SUM(f.valor_total) FILTER (WHERE NOT f.cancelamento), 0)::numeric(20,4) AS faturamento_bruto,
+         COALESCE(SUM(ABS(f.valor_total)) FILTER (WHERE f.cancelamento), 0)::numeric(20,4) AS valor_cancelado,
+         COALESCE(SUM(f.valor_total), 0)::numeric(20,4) AS faturamento_liquido,
+         COALESCE(SUM(f.quantity) FILTER (WHERE NOT f.cancelamento), 0)::bigint AS quantidade_vendida,
+         COALESCE(SUM(ABS(f.quantity)) FILTER (WHERE f.cancelamento), 0)::bigint AS quantidade_cancelada,
+         COUNT(DISTINCT f.invoice_no) FILTER (WHERE NOT f.cancelamento)::bigint AS invoices_venda,
+         COUNT(DISTINCT f.invoice_no) FILTER (WHERE f.cancelamento)::bigint AS invoices_canceladas,
+         COUNT(DISTINCT f.invoice_no)::bigint AS total_invoices,
+         COUNT(*)::bigint AS total_linhas_fato,
+         COUNT(*) FILTER (WHERE f.customer_id IS NULL)::bigint AS customer_id_nulos
+    FROM online_retail.fato_venda f
+   WHERE f.batch_id = '${BATCH_ID}'
+)
+SELECT '${BATCH_ID}'::varchar(64) AS batch_id,
+       CURRENT_TIMESTAMP AS calculado_em,
+       m.faturamento_bruto,
+       m.valor_cancelado,
+       m.faturamento_liquido,
+       m.quantidade_vendida,
+       m.quantidade_cancelada,
+       m.invoices_venda,
+       m.invoices_canceladas,
+       CASE WHEN m.invoices_venda = 0 THEN 0::numeric(20,4)
+            ELSE (m.faturamento_liquido / m.invoices_venda)::numeric(20,4)
+       END AS ticket_medio,
+       CASE WHEN m.total_invoices = 0 THEN 0::numeric(9,4)
+            ELSE (100.0 * m.invoices_canceladas / m.total_invoices)::numeric(9,4)
+       END AS taxa_cancelamento_pct,
+       m.total_linhas_fato,
+       m.customer_id_nulos
+  FROM metricas m;</sql>
+    <limit>0</limit>
+    <lookup/>
+    <execute_each_row>N</execute_each_row>
+    <variables_active>Y</variables_active>
+    <attributes/>
+    <GUI>
+      <xloc>128</xloc>
+      <yloc>144</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>Upsert indicadores_resumo</name>
+    <type>InsertUpdate</type>
+    <description>Persiste uma linha de indicadores por batch_id.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <connection>OnlineRetailPostgreSQL</connection>
+    <commit>1</commit>
+    <update_bypassed>N</update_bypassed>
+    <lookup>
+      <schema>online_retail</schema>
+      <table>indicadores_resumo</table>
+      <key><name>batch_id</name><field>batch_id</field><condition>=</condition><name2/></key>
+      <value><name>batch_id</name><rename>batch_id</rename><update>N</update></value>
+      <value><name>calculado_em</name><rename>calculado_em</rename><update>Y</update></value>
+      <value><name>faturamento_bruto</name><rename>faturamento_bruto</rename><update>Y</update></value>
+      <value><name>valor_cancelado</name><rename>valor_cancelado</rename><update>Y</update></value>
+      <value><name>faturamento_liquido</name><rename>faturamento_liquido</rename><update>Y</update></value>
+      <value><name>quantidade_vendida</name><rename>quantidade_vendida</rename><update>Y</update></value>
+      <value><name>quantidade_cancelada</name><rename>quantidade_cancelada</rename><update>Y</update></value>
+      <value><name>invoices_venda</name><rename>invoices_venda</rename><update>Y</update></value>
+      <value><name>invoices_canceladas</name><rename>invoices_canceladas</rename><update>Y</update></value>
+      <value><name>ticket_medio</name><rename>ticket_medio</rename><update>Y</update></value>
+      <value><name>taxa_cancelamento_pct</name><rename>taxa_cancelamento_pct</rename><update>Y</update></value>
+      <value><name>total_linhas_fato</name><rename>total_linhas_fato</rename><update>Y</update></value>
+      <value><name>customer_id_nulos</name><rename>customer_id_nulos</rename><update>Y</update></value>
+    </lookup>
+    <attributes/>
+    <GUI>
+      <xloc>464</xloc>
+      <yloc>144</yloc>
+    </GUI>
+  </transform>
+  <transform_error_handling/>
+  <attributes/>
+</pipeline>

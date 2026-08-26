@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pipeline>
+  <info>
+    <name>04_dim_pais</name>
+    <name_sync_with_filename>Y</name_sync_with_filename>
+    <description>Carrega a dimensão de países do lote por upsert em country.</description>
+    <extended_description/>
+    <pipeline_version/>
+    <pipeline_type>Normal</pipeline_type>
+    <pipeline_status>0</pipeline_status>
+    <parameters/>
+    <capture_transform_performance>N</capture_transform_performance>
+    <transform_performance_capturing_delay>1000</transform_performance_capturing_delay>
+    <transform_performance_capturing_size_limit>100</transform_performance_capturing_size_limit>
+    <created_user>Codex</created_user>
+    <created_date>2026/08/25 00:00:00.000</created_date>
+    <modified_user>Codex</modified_user>
+    <modified_date>2026/08/25 00:00:00.000</modified_date>
+    <key_for_session_key/>
+    <is_key_private>N</is_key_private>
+  </info>
+  <order>
+    <hop>
+      <from>Ler países do lote</from>
+      <to>Upsert dim_pais</to>
+      <enabled>Y</enabled>
+    </hop>
+  </order>
+  <transform>
+    <name>Ler países do lote</name>
+    <type>TableInput</type>
+    <description>Seleciona os países distintos aprovados no lote.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <connection>OnlineRetailPostgreSQL</connection>
+    <sql>SELECT DISTINCT w.country
+  FROM online_retail.wrk_online_retail_validos w
+ WHERE w.batch_id = '${BATCH_ID}'
+ ORDER BY w.country;</sql>
+    <limit>0</limit>
+    <lookup/>
+    <execute_each_row>N</execute_each_row>
+    <variables_active>Y</variables_active>
+    <attributes/>
+    <GUI>
+      <xloc>144</xloc>
+      <yloc>144</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>Upsert dim_pais</name>
+    <type>InsertUpdate</type>
+    <description>Insere somente países ainda ausentes.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <connection>OnlineRetailPostgreSQL</connection>
+    <commit>1000</commit>
+    <update_bypassed>N</update_bypassed>
+    <lookup>
+      <schema>online_retail</schema>
+      <table>dim_pais</table>
+      <key>
+        <name>country</name>
+        <field>country</field>
+        <condition>=</condition>
+        <name2/>
+      </key>
+      <value>
+        <name>country</name>
+        <rename>country</rename>
+        <update>N</update>
+      </value>
+    </lookup>
+    <attributes/>
+    <GUI>
+      <xloc>432</xloc>
+      <yloc>144</yloc>
+    </GUI>
+  </transform>
+  <transform_error_handling/>
+  <attributes/>
+</pipeline>

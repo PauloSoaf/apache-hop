@@ -1,0 +1,95 @@
+services:
+  hop-web:
+    # Imagem derivada (ver Dockerfile): mesma apache/hop-web, mas com o usuario
+    # interno "hop" usando UID/GID 1000, igual ao do host. Assim os arquivos que
+    # o Hop cria em ./projects ficam editaveis pelo seu usuario.
+    build:
+      context: .
+      args:
+        HOST_UID: "1000"
+        HOST_GID: "1000"
+    image: hop-web-online-retail:latest
+    container_name: hop-web
+    ports:
+      - "8080:8080"
+    environment:
+      # Projeto aberto por padrao ao iniciar a GUI
+      HOP_PROJECT_NAME: online-retail
+      HOP_PROJECT_FOLDER: /project/online-retail
+      HOP_PROJECT_CONFIG_FILE_NAME: project-config.json
+      # Ambiente (dev) gerado por scripts/preparar-ambiente.sh a partir do .env.
+      # E dele que o Hop le DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD.
+      HOP_ENVIRONMENT_NAME: online-retail-dev
+      HOP_ENVIRONMENT_CONFIG_FILE_NAME_PATHS: /project/online-retail/online-retail-dev.json
+      HOP_LOG_LEVEL: Basic
+      # Aumente para 1.25 / 1.5 se a GUI ficar pequena em tela grande
+      HOP_GUI_ZOOM_FACTOR: "1.0"
+    volumes:
+      # Configuracao do Hop (inclui os projetos "default" e "samples")
+      - ./config:/usr/local/tomcat/webapps/ROOT/config
+      # Historico/estado da GUI (abas abertas, ultimos arquivos)
+      - ./audit:/usr/local/tomcat/webapps/ROOT/audit
+      # Projeto Online Retail (fica visivel em /project/online-retail)
+      - ./projects:/project
+      # Driver JDBC do PostgreSQL
+      - ./jdbc-drivers:/usr/local/tomcat/jdbc-drivers
+    depends_on:
+      online-retail-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ui >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+  online-retail-db:
+    image: postgres:16.15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${DB_NAME:-online_retail}"
+      POSTGRES_USER: "${DB_USER:-online_retail}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-change_me_local_only}"
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - online_retail_pgdata:/var/lib/postgresql/data
+      - ./projects/online-retail/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./projects/online-retail/sql/02_tables.sql:/docker-entrypoint-initdb.d/02_tables.sql:ro
+      - ./projects/online-retail/sql/03_views_indicadores.sql:/docker-entrypoint-initdb.d/03_views_indicadores.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  online-retail-metabase:
+    image: metabase/metabase:v0.63.13
+    restart: unless-stopped
+    depends_on:
+      online-retail-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      MB_DB_TYPE: h2
+      MB_DB_FILE: /metabase-data/metabase.db
+      MB_SITE_NAME: Online Retail
+    volumes:
+      - online_retail_metabase_data:/metabase-data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- http://localhost:3000/api/health |
+          grep -q '"status":"ok"'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+volumes:
+  online_retail_pgdata:
+  online_retail_metabase_data:
