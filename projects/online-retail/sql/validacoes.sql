@@ -8,6 +8,60 @@
 --
 --   docker compose exec online-retail-db psql -U online_retail -d online_retail
 
+-- 0. RESUMO: as 12 verificações em uma tabela só.
+-- Todas as linhas devem sair com Status = OK. É a consulta usada no
+-- dashboard e na apresentação; as consultas 1 a 12 abaixo detalham cada uma.
+WITH u AS (
+    SELECT batch_id, linhas_origem, linhas_staging, linhas_validas,
+           linhas_rejeitadas, duplicatas_removidas, linhas_fato
+    FROM online_retail.log_execucao
+    WHERE status = 'SUCCESS' ORDER BY inicio_execucao DESC LIMIT 1
+),
+v (ordem, verificacao, esperado, obtido) AS (
+    SELECT 1, 'Origem = staging', 0::BIGINT,
+           (SELECT linhas_origem - linhas_staging FROM u)
+    UNION ALL SELECT 2, 'Staging = válidos + rejeitados', 0::BIGINT,
+           (SELECT u.linhas_staging - u.linhas_validas
+                   - (SELECT COUNT(DISTINCT linha_seq) FROM online_retail.rejeitados r
+                       WHERE r.batch_id = u.batch_id) FROM u)
+    UNION ALL SELECT 3, 'Duplicatas rejeitadas', 5268::BIGINT,
+           (SELECT COUNT(*) FROM online_retail.rejeitados r JOIN u ON u.batch_id = r.batch_id
+             WHERE motivo = 'DUPLICATA_INTEGRAL')
+    UNION ALL SELECT 4, 'Duplicatas por hash = pipeline', 0::BIGINT,
+           (SELECT COALESCE(SUM(n-1),0) - (SELECT COUNT(*) FROM online_retail.rejeitados r
+              JOIN u ON u.batch_id = r.batch_id WHERE motivo='DUPLICATA_INTEGRAL')
+              FROM (SELECT COUNT(*) n FROM online_retail.stg_online_retail s JOIN u ON u.batch_id=s.batch_id
+                     GROUP BY s.registro_hash HAVING COUNT(*)>1) g)
+    UNION ALL SELECT 5, 'Chave natural duplicada na fato', 0::BIGINT,
+           (SELECT COUNT(*) FROM (SELECT 1 FROM online_retail.fato_venda
+              GROUP BY invoice_no, stock_code, linha_seq HAVING COUNT(*)>1) d)
+    UNION ALL SELECT 6, 'stock_code duplicado em dim_produto', 0::BIGINT,
+           (SELECT COUNT(*) FROM (SELECT 1 FROM online_retail.dim_produto GROUP BY stock_code HAVING COUNT(*)>1) d)
+    UNION ALL SELECT 7, 'country duplicado em dim_pais', 0::BIGINT,
+           (SELECT COUNT(*) FROM (SELECT 1 FROM online_retail.dim_pais GROUP BY country HAVING COUNT(*)>1) d)
+    UNION ALL SELECT 8, 'data duplicada em dim_tempo', 0::BIGINT,
+           (SELECT COUNT(*) FROM (SELECT 1 FROM online_retail.dim_tempo GROUP BY data HAVING COUNT(*)>1) d)
+    UNION ALL SELECT 9, 'Fatos órfãos de dimensão', 0::BIGINT,
+           (SELECT COUNT(*) FROM online_retail.fato_venda f
+             LEFT JOIN online_retail.dim_produto p ON p.produto_sk=f.produto_sk
+             LEFT JOIN online_retail.dim_pais   c ON c.pais_sk=f.pais_sk
+             LEFT JOIN online_retail.dim_tempo  t ON t.tempo_sk=f.tempo_sk
+            WHERE p.produto_sk IS NULL OR c.pais_sk IS NULL OR t.tempo_sk IS NULL)
+    UNION ALL SELECT 10, 'Regras violadas dentro da fato', 0::BIGINT,
+           (SELECT COUNT(*) FROM online_retail.fato_venda
+             WHERE unit_price <= 0
+                OR (NOT cancelamento AND quantity <= 0)
+                OR cancelamento <> (LEFT(invoice_no,1) = 'C')
+                OR valor_total <> quantity * unit_price)
+    UNION ALL SELECT 11, 'Fato após reexecução', 534129::BIGINT,
+           (SELECT COUNT(*) FROM online_retail.fato_venda)
+    UNION ALL SELECT 12, 'Baseline UCI (origem)', 541909::BIGINT,
+           (SELECT linhas_origem FROM u)
+)
+SELECT ordem AS "#", verificacao AS "Verificação", esperado AS "Esperado", obtido AS "Obtido",
+       CASE WHEN esperado = obtido THEN 'OK' ELSE 'FALHOU' END AS "Status"
+FROM v ORDER BY ordem;
+
 -- 1. Resumo da execução concluída mais recente.
 WITH ultima_execucao AS (
     SELECT *

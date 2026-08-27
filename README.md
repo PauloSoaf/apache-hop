@@ -503,7 +503,9 @@ docker compose exec -T online-retail-db \
   -f /dev/stdin < projects/online-retail/sql/validacoes.sql
 ```
 
-São 12 blocos de verificação:
+O arquivo começa com a consulta **0**, que devolve as 12 verificações em uma
+tabela única — toda linha tem de sair com `Status = OK`. As consultas 1 a 12
+detalham cada uma delas:
 
 | # | Verifica | Esperado |
 |---|---|---|

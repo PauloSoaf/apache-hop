@@ -463,5 +463,5 @@
     "fetchAutomatic" : false,
     "ignoringPositionInDiff" : true
   },
-  "doNotShowWelcomeDialog" : false
+  "doNotShowWelcomeDialog" : true
 }
